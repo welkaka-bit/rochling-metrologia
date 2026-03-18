@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Röchling — Metrologia</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<!-- FIREBASE SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {
+  getFirestore, collection, addDoc, getDocs, deleteDoc,
+  doc, onSnapshot, query, orderBy, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDWHZv3KIccBzYTWrvWJZ75eHPnG14uWdw",
+  authDomain: "rochling-metrologia.firebaseapp.com",
+  projectId: "rochling-metrologia"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+const COL = "ensaios";
+
+// Expose to window so regular scripts can call
+window._db  = db;
+window._col = COL;
+window._fbFns = { collection, addDoc, getDocs, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp };
+
+// Real-time listener — fires on every change from any device
+const q = query(collection(db, COL), orderBy("createdAt", "asc"));
+onSnapshot(q, (snapshot) => {
+  window._records = [];
+  snapshot.forEach(d => {
+    window._records.push({ firestoreId: d.id, ...d.data() });
+  });
+  if (window._onDataReady) window._onDataReady();
+}, (err) => {
+  console.error("Firestore error:", err);
+  if (window._onFirestoreError) window._onFirestoreError(err.message);
+});
+</script>
+
+<style>
+:root{
+  --bg:#f4f6f9;--bg2:#ffffff;--bg3:#f0f2f6;--bg4:#e4e8ef;
+  --border:#dde2ea;--border2:#c8d0dc;
+  --text:#0d1117;--text2:#4a5568;--text3:#8a97a8;
+  --accent:#1a6eff;--accent2:#0d52c9;--accentL:#e8f0ff;
+  --danger:#e53e3e;--dangerL:#fff0f0;
+  --success:#16a34a;--successL:#f0fff6;
+  --warn:#ca8a04;--warnL:#fffbeb;
+  --comp:#1a6eff;--trac:#e55a2b;
+  --mono:'DM Mono',monospace;--display:'Syne',sans-serif;--body:'DM Sans',sans-serif;
+  --radius:10px;
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.05);
+  --shadowMd:0 2px 8px rgba(0,0,0,.08),0 8px 32px rgba(0,0,0,.07);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:14px;min-height:100vh;}
+.app{max-width:1320px;margin:0 auto;padding:0 24px 48px;}
+
+/* HEADER */
+header{display:flex;align-items:center;justify-content:space-between;padding:20px 0 22px;border-bottom:1.5px solid var(--border);margin-bottom:22px;}
+.logo-title{font-family:var(--display);font-size:22px;font-weight:800;letter-spacing:-.5px;color:var(--text);}
+.logo-title em{color:var(--accent);font-style:normal;}
+.logo-sub{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:.06em;margin-top:3px;}
+.header-meta{display:flex;align-items:center;gap:14px;}
+.live-pill{display:flex;align-items:center;gap:6px;background:var(--successL);border:1px solid #bbf7d0;border-radius:99px;padding:5px 12px;font-family:var(--mono);font-size:11px;color:var(--success);letter-spacing:.04em;}
+.pulse{width:7px;height:7px;background:var(--success);border-radius:50%;animation:pulse 1.8s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.75)}}
+#clock{font-family:var(--mono);font-size:12px;color:var(--text3);}
+
+/* CLOUD STATUS BAR */
+.cloud-bar{display:flex;align-items:center;justify-content:space-between;border-radius:9px;padding:10px 16px;margin-bottom:22px;font-family:var(--mono);font-size:11px;transition:all .3s;}
+.cloud-bar.connecting{background:#fffbeb;border:1px solid #fcd34d;color:var(--warn);}
+.cloud-bar.connected{background:var(--successL);border:1px solid #bbf7d0;color:var(--success);}
+.cloud-bar.error{background:var(--dangerL);border:1px solid #fca5a5;color:var(--danger);}
+.cloud-icon{font-size:14px;margin-right:6px;}
+.cloud-right{display:flex;align-items:center;gap:10px;}
+.btn-danger-sm{padding:4px 12px;border-radius:6px;border:1px solid var(--danger);background:var(--dangerL);color:var(--danger);font-family:var(--mono);font-size:10px;cursor:pointer;transition:all .15s;}
+.btn-danger-sm:hover{background:var(--danger);color:#fff;}
+
+/* METRICS */
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:26px;}
+.mcard{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);border-top:3px solid var(--accent-color,var(--accent));}
+.mcard-label{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:8px;}
+.mcard-val{font-family:var(--display);font-size:28px;font-weight:700;line-height:1;color:var(--val-color,var(--text));}
+.mcard-sub{font-size:11px;color:var(--text3);margin-top:6px;font-family:var(--mono);}
+
+/* MAIN */
+.main{display:grid;grid-template-columns:390px 1fr;gap:20px;margin-bottom:20px;}
+
+/* PANEL */
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:24px;box-shadow:var(--shadow);}
+.panel-title{font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+.panel-title::after{content:'';flex:1;height:1px;background:var(--border);}
+
+.type-row{display:flex;gap:8px;margin-bottom:14px;}
+.type-btn{flex:1;padding:10px;border-radius:8px;border:1.5px solid var(--border2);background:var(--bg3);font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.03em;color:var(--text2);cursor:pointer;transition:all .18s;}
+.type-btn.active-comp{background:var(--accentL);border-color:var(--accent);color:var(--accent);}
+.type-btn.active-trac{background:#fff3ef;border-color:var(--trac);color:var(--trac);}
+
+.field{margin-bottom:12px;}
+.field-label{display:block;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:5px;}
+input,select,textarea{width:100%;background:var(--bg3);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--body);font-size:13px;padding:9px 12px;outline:none;transition:border-color .15s,background .15s;}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);background:#fff;}
+input[type="datetime-local"]{font-family:var(--mono);font-size:12px;}
+select option{background:#fff;}
+textarea{resize:vertical;min-height:54px;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+/* DATETIME TOGGLE */
+.dt-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;}
+.toggle-wrap{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10px;color:var(--text3);}
+.toggle-switch{position:relative;width:32px;height:18px;flex-shrink:0;}
+.toggle-switch input{opacity:0;width:0;height:0;position:absolute;}
+.toggle-slider{position:absolute;inset:0;background:var(--border2);border-radius:9px;cursor:pointer;transition:.2s;}
+.toggle-slider::before{content:'';position:absolute;width:12px;height:12px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;}
+.toggle-switch input:checked+.toggle-slider{background:var(--accent);}
+.toggle-switch input:checked+.toggle-slider::before{transform:translateX(14px);}
+.dt-auto-box{background:var(--bg3);border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-family:var(--mono);font-size:12px;color:var(--text3);}
+
+.field-hi input{border-color:rgba(26,110,255,.35);background:var(--accentL);font-family:var(--mono);font-size:14px;font-weight:500;}
+.field-hi.found input{border-color:var(--border2);background:#f7f8fa;}
+
+.result-box{background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;padding:13px 15px;margin:10px 0;display:flex;align-items:center;justify-content:space-between;}
+.result-stress{font-family:var(--mono);font-size:20px;font-weight:500;}
+.result-stress small{font-size:11px;color:var(--text3);font-weight:400;}
+.status-badge{padding:5px 13px;border-radius:99px;font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.06em;border:1.5px solid currentColor;}
+.s-idle{color:var(--text3);border-color:var(--border2);background:var(--bg3);}
+.s-ok{color:var(--success);background:var(--successL);border-color:#86efac;}
+.s-fail{color:var(--danger);background:var(--dangerL);border-color:#fca5a5;}
+
+.diff-row{display:flex;align-items:center;gap:8px;margin:4px 0 10px;font-family:var(--mono);font-size:11px;color:var(--text3);}
+.diff-val{font-weight:500;}
+
+.prog-track{height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;margin-bottom:4px;}
+.prog-fill{height:100%;border-radius:2px;transition:width .35s,background .25s;}
+.prog-label{font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:12px;}
+
+.btn-save{width:100%;padding:12px;margin-top:10px;border-radius:9px;border:none;background:var(--text);color:#fff;font-family:var(--display);font-size:13px;font-weight:700;letter-spacing:.04em;cursor:pointer;transition:background .15s,transform .1s;display:flex;align-items:center;justify-content:center;gap:8px;}
+.btn-save:hover{background:#1a2233;}
+.btn-save:active{transform:scale(.98);}
+.btn-save:disabled{opacity:.5;cursor:not-allowed;}
+.btn-ghost{width:100%;padding:9px;margin-top:8px;border-radius:9px;border:1.5px solid var(--border2);background:transparent;color:var(--text2);font-family:var(--body);font-size:13px;cursor:pointer;}
+.btn-ghost:hover{border-color:var(--danger);color:var(--danger);}
+
+/* SAVING SPINNER */
+.spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;display:none;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* CHARTS */
+.charts-col{display:flex;flex-direction:column;gap:16px;}
+.chart-panel{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--shadow);}
+.chart-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.chart-title{font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text2);}
+.chart-tag{font-family:var(--mono);font-size:10px;color:var(--text3);}
+.charts2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+
+/* TABLE */
+.table-section{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:22px;box-shadow:var(--shadow);margin-bottom:20px;}
+.tbl-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;}
+.tbl-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.tbl-search{width:180px;background:var(--bg3);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 12px;outline:none;}
+.tbl-search:focus{border-color:var(--accent);}
+.tool-btn{padding:7px 14px;border-radius:8px;border:1.5px solid var(--border2);background:transparent;color:var(--text2);font-family:var(--mono);font-size:11px;cursor:pointer;transition:all .15s;}
+.tool-btn:hover{border-color:var(--accent);color:var(--accent);}
+.tool-btn.print-btn{border-color:var(--accent);color:var(--accent);background:var(--accentL);}
+.tool-btn.print-btn:hover{background:var(--accent);color:#fff;}
+
+table{width:100%;border-collapse:collapse;}
+thead th{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding:8px 10px;border-bottom:1.5px solid var(--border);text-align:left;font-weight:400;white-space:nowrap;}
+tbody td{padding:10px 10px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover td{background:var(--bg3);}
+.td-mono{font-family:var(--mono);color:var(--text);}
+.td-amostra{font-family:var(--mono);font-weight:500;color:var(--accent);}
+.tag-comp{background:var(--accentL);color:var(--comp);border:1px solid #93c5fd;padding:2px 7px;border-radius:4px;font-size:10px;font-family:var(--mono);}
+.tag-trac{background:#fff3ef;color:var(--trac);border:1px solid #fdba74;padding:2px 7px;border-radius:4px;font-size:10px;font-family:var(--mono);}
+.res-ok{color:var(--success);font-family:var(--mono);font-weight:500;font-size:11px;}
+.res-fail{color:var(--danger);font-family:var(--mono);font-weight:500;font-size:11px;}
+.empty-td{text-align:center;padding:40px!important;color:var(--text3);font-family:var(--mono);font-size:12px;}
+.del-btn{background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:5px;padding:2px 7px;font-size:10px;cursor:pointer;}
+.del-btn:hover{border-color:var(--danger);color:var(--danger);}
+.print-row-btn{background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:5px;padding:2px 7px;font-size:10px;cursor:pointer;margin-right:4px;}
+.print-row-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+/* MODAL */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
+.overlay.open{display:flex;}
+.modal{background:#fff;border:1px solid var(--border);border-radius:16px;padding:28px;width:560px;max-width:95vw;box-shadow:var(--shadowMd);max-height:90vh;overflow-y:auto;}
+.modal-title{font-family:var(--display);font-size:18px;font-weight:800;margin-bottom:4px;}
+.modal-sub{font-size:12px;color:var(--text3);margin-bottom:20px;font-family:var(--mono);}
+.modal-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+.modal-actions{display:flex;gap:10px;margin-top:20px;}
+.btn-cancel{flex:1;padding:10px;border-radius:8px;border:1.5px solid var(--border2);background:transparent;color:var(--text2);font-family:var(--body);cursor:pointer;}
+.btn-print{flex:2;padding:11px;border-radius:8px;border:none;background:var(--text);color:#fff;font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:.04em;cursor:pointer;}
+.btn-print:hover{background:#1a2233;}
+
+.confirm-modal{background:#fff;border-radius:14px;padding:24px;width:380px;max-width:95vw;box-shadow:var(--shadowMd);text-align:center;}
+.confirm-modal h3{font-family:var(--display);font-size:16px;margin-bottom:8px;}
+.confirm-modal p{font-size:13px;color:var(--text2);margin-bottom:20px;line-height:1.6;}
+.confirm-actions{display:flex;gap:10px;}
+.btn-confirm-cancel{flex:1;padding:10px;border-radius:8px;border:1.5px solid var(--border2);background:transparent;font-family:var(--body);cursor:pointer;color:var(--text2);}
+.btn-confirm-ok{flex:1;padding:10px;border-radius:8px;border:none;background:var(--danger);color:#fff;font-family:var(--display);font-weight:700;cursor:pointer;}
+
+.toast{position:fixed;bottom:28px;right:28px;background:var(--text);color:#fff;border-radius:10px;padding:12px 20px;font-family:var(--mono);font-size:12px;opacity:0;transform:translateY(8px);transition:all .22s;z-index:999;box-shadow:var(--shadowMd);max-width:340px;}
+.toast.show{opacity:1;transform:translateY(0);}
+
+@media(max-width:900px){.main{grid-template-columns:1fr;}.metrics{grid-template-columns:repeat(2,1fr);}}
+@media print{body,*{visibility:hidden;}.no-print{display:none!important;}}
+</style>
+</head>
+<body>
+<div class="app">
+
+<header>
+  <div>
+    <div class="logo-title">Röchling — <em>Metrologia</em></div>
+    <div class="logo-sub">Sistema de Inspeção Mecânica · v5.0 Cloud</div>
+  </div>
+  <div class="header-meta">
+    <span id="clock">--:--:--</span>
+    <div class="live-pill"><span class="pulse"></span>AO VIVO</div>
+  </div>
+</header>
+
+<!-- CLOUD STATUS -->
+<div class="cloud-bar connecting" id="cloud-bar">
+  <span><span class="cloud-icon">☁</span> <span id="cloud-status">Conectando ao Firebase...</span></span>
+  <div class="cloud-right">
+    <span id="cloud-count" style="opacity:.7"></span>
+    <button class="btn-danger-sm" onclick="openConfirmClear()">Limpar tudo</button>
+  </div>
+</div>
+
+<!-- METRICS -->
+<div class="metrics">
+  <div class="mcard" style="--accent-color:#1a6eff">
+    <div class="mcard-label">Total de ensaios</div>
+    <div class="mcard-val" id="m-total">—</div>
+    <div class="mcard-sub">na nuvem</div>
+  </div>
+  <div class="mcard" style="--accent-color:#16a34a;--val-color:#16a34a">
+    <div class="mcard-label">Aprovados</div>
+    <div class="mcard-val" id="m-ok">—</div>
+    <div class="mcard-sub" id="m-ok-pct">—% do total</div>
+  </div>
+  <div class="mcard" style="--accent-color:#e53e3e;--val-color:#e53e3e">
+    <div class="mcard-label">Reprovados</div>
+    <div class="mcard-val" id="m-fail">—</div>
+    <div class="mcard-sub" id="m-fail-pct">—% do total</div>
+  </div>
+  <div class="mcard" style="--accent-color:#ca8a04;--val-color:#ca8a04">
+    <div class="mcard-label">Taxa de aprovação</div>
+    <div class="mcard-val" id="m-pct">—</div>
+    <div class="mcard-sub">índice geral</div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="panel">
+    <div class="panel-title">Novo ensaio</div>
+
+    <div class="type-row">
+      <button class="type-btn active-comp" id="btn-comp" onclick="setType('comp')">⬇ Compressão</button>
+      <button class="type-btn" id="btn-trac" onclick="setType('trac')">⬆ Tração</button>
+    </div>
+
+    <div class="row2">
+      <div class="field">
+        <label class="field-label">Inspetor *</label>
+        <input type="text" id="f-inspector" placeholder="Nome completo">
+      </div>
+      <div class="field">
+        <label class="field-label">Cód. amostra *</label>
+        <input type="text" id="f-sample" placeholder="Ex: CP-001">
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="dt-row">
+        <span class="field-label" style="margin-bottom:0">Data e hora do ensaio</span>
+        <div class="toggle-wrap">
+          <label class="toggle-switch">
+            <input type="checkbox" id="auto-dt" checked onchange="toggleDt()">
+            <span class="toggle-slider"></span>
+          </label>
+          <span id="dt-lbl">Automática</span>
+        </div>
+      </div>
+      <div id="dt-auto" class="dt-auto-box" style="margin-top:5px">Será registrada no momento do salvamento</div>
+      <input type="datetime-local" id="f-datetime" style="display:none;margin-top:5px">
+    </div>
+
+    <div class="field">
+      <label class="field-label">Temperatura (°C)</label>
+      <input type="number" id="f-temp" placeholder="Ex: 23.5" step="0.1">
+    </div>
+
+    <div class="panel-title">Valores de ensaio</div>
+
+    <div class="row2">
+      <div class="field field-hi">
+        <label class="field-label">Valor especificado *</label>
+        <input type="number" id="f-spec" placeholder="0.00" step="0.01" oninput="liveCalc()">
+      </div>
+      <div class="field field-hi found">
+        <label class="field-label">Valor encontrado *</label>
+        <input type="number" id="f-found" placeholder="0.00" step="0.01" oninput="liveCalc()">
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="field-label">Unidade de medida</label>
+      <select id="f-unit">
+        <option value="kN">kN — Quilonewton</option>
+        <option value="MPa">MPa — Megapascal</option>
+        <option value="kgf">kgf — Quilograma-força</option>
+        <option value="tf">tf — Tonelada-força</option>
+        <option value="N">N — Newton</option>
+        <option value="mm">mm — Milímetro</option>
+        <option value="psi">psi — Libra por pol²</option>
+        <option value="bar">bar</option>
+      </select>
+    </div>
+
+    <div class="result-box">
+      <div>
+        <div class="mcard-label" style="margin-bottom:3px">Resultado calculado</div>
+        <div class="result-stress" id="live-found">— <small id="live-unit">—</small></div>
+      </div>
+      <div id="live-badge" class="status-badge s-idle">AGUARDANDO</div>
+    </div>
+
+    <div class="diff-row" id="diff-row" style="display:none">
+      <span>Diferença:</span>
+      <span class="diff-val" id="diff-val">—</span>
+      <span id="diff-pct"></span>
+    </div>
+
+    <div class="prog-track"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+    <div class="prog-label" id="prog-label">Preencha os valores para avaliar</div>
+
+    <div class="field">
+      <label class="field-label">Observações</label>
+      <textarea id="f-notes" placeholder="Condições, anomalias, equipamento..."></textarea>
+    </div>
+
+    <button class="btn-save" id="btn-save" onclick="saveRecord()">
+      <span class="spinner" id="save-spinner"></span>
+      <span id="save-label">↗ REGISTRAR RESULTADO</span>
+    </button>
+    <button class="btn-ghost" onclick="clearForm()">Limpar formulário</button>
+  </div>
+
+  <!-- CHARTS -->
+  <div class="charts-col">
+    <div class="chart-panel" style="flex:1.4">
+      <div class="chart-head">
+        <span class="chart-title">Histórico — Especificado vs Encontrado</span>
+        <span class="chart-tag" id="chart-count">— ensaios</span>
+      </div>
+      <div style="position:relative;height:210px"><canvas id="lineChart"></canvas></div>
+    </div>
+    <div class="charts2">
+      <div class="chart-panel">
+        <div class="chart-head"><span class="chart-title">Resultado</span><span class="chart-tag">Distribuição</span></div>
+        <div style="position:relative;height:140px"><canvas id="doughnutChart"></canvas></div>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-head"><span class="chart-title">Desvio %</span><span class="chart-tag">Por ensaio</span></div>
+        <div style="position:relative;height:140px"><canvas id="deviationChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TABLE -->
+<div class="table-section">
+  <div class="tbl-toolbar">
+    <div class="panel-title" style="margin-bottom:0">Histórico completo — nuvem</div>
+    <div class="tbl-actions">
+      <input class="tbl-search" id="tbl-search" placeholder="Filtrar..." oninput="renderTable()">
+      <button class="tool-btn" onclick="exportCSV()">↓ CSV</button>
+      <button class="tool-btn print-btn" onclick="openModal()">⎙ Imprimir Laudo</button>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Data / Hora</th><th>Tipo</th><th>Inspetor</th><th>Amostra</th>
+        <th>Unidade</th><th>Especificado</th><th>Encontrado</th><th>Desvio</th>
+        <th>Temp °C</th><th>Status</th><th>Ações</th>
+      </tr>
+    </thead>
+    <tbody id="tbl-body">
+      <tr><td class="empty-td" colspan="12">Conectando à nuvem...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+</div><!-- /app -->
+
+<!-- MODAL LAUDO -->
+<div class="overlay no-print" id="modal">
+  <div class="modal">
+    <div class="modal-title">⎙ Emitir Laudo Técnico</div>
+    <div class="modal-sub">Use os filtros para escolher quais registros incluir no laudo.</div>
+    <div class="modal-row">
+      <div class="field">
+        <label class="field-label">Empresa / Laboratório</label>
+        <input type="text" id="p-empresa" value="Röchling">
+      </div>
+      <div class="field">
+        <label class="field-label">Nº do laudo</label>
+        <input type="text" id="p-laudo" placeholder="ROC-2025-001">
+      </div>
+    </div>
+    <div class="modal-row">
+      <div class="field">
+        <label class="field-label">Responsável técnico</label>
+        <input type="text" id="p-resp" placeholder="Eng. Nome Sobrenome">
+      </div>
+      <div class="field">
+        <label class="field-label">CREA / Registro</label>
+        <input type="text" id="p-crea" placeholder="CREA-SP 000000">
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">Filtrar por amostra ou inspetor (vazio = todos)</label>
+      <input type="text" id="p-filter" placeholder="Ex: CP-001">
+    </div>
+    <div class="modal-row">
+      <div class="field">
+        <label class="field-label">Data início</label>
+        <input type="date" id="p-date-from">
+      </div>
+      <div class="field">
+        <label class="field-label">Data fim</label>
+        <input type="date" id="p-date-to">
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">Observações do laudo</label>
+      <textarea id="p-obs" placeholder="Condições do laboratório, equipamentos, normas..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      <button class="btn-print" onclick="printReport()">⎙ Gerar e Imprimir</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM CLEAR -->
+<div class="overlay no-print" id="confirm-overlay">
+  <div class="confirm-modal">
+    <h3>⚠ Apagar todos os dados?</h3>
+    <p>Isso removerá permanentemente todos os <strong id="confirm-count">0</strong> registros do Firebase.<br>Esta ação <strong>não pode ser desfeita</strong>.</p>
+    <div class="confirm-actions">
+      <button class="btn-confirm-cancel" onclick="closeConfirmClear()">Cancelar</button>
+      <button class="btn-confirm-ok" onclick="clearAllData()">Sim, apagar tudo</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── STATE ──
+let currentType = 'comp';
+let lineChart, doughnutChart, deviationChart;
+let chartsReady = false;
+
+// ── CLOCK ──
+function tick() {
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    n.toLocaleString('pt-BR',{weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+tick(); setInterval(tick, 1000);
+
+// ── FIREBASE CALLBACKS ──
+window._onDataReady = function() {
+  const records = window._records || [];
+  updateCloudBar(true, records.length);
+  updateMetrics(records);
+  if (chartsReady) updateCharts(records);
+  renderTable();
+};
+
+window._onFirestoreError = function(msg) {
+  const bar = document.getElementById('cloud-bar');
+  bar.className = 'cloud-bar error';
+  document.getElementById('cloud-status').textContent = '⚠ Erro de conexão: ' + msg;
+};
+
+function updateCloudBar(ok, count) {
+  const bar = document.getElementById('cloud-bar');
+  bar.className = 'cloud-bar ' + (ok ? 'connected' : 'connecting');
+  document.getElementById('cloud-status').textContent = ok
+    ? '✓ Firebase conectado — dados sincronizados em tempo real'
+    : 'Conectando ao Firebase...';
+  document.getElementById('cloud-count').textContent = ok
+    ? (count + ' registro' + (count !== 1 ? 's' : '') + ' na nuvem')
+    : '';
+}
+
+// ── DATETIME TOGGLE ──
+function toggleDt() {
+  const auto = document.getElementById('auto-dt').checked;
+  document.getElementById('f-datetime').style.display = auto ? 'none' : 'block';
+  document.getElementById('dt-auto').style.display    = auto ? 'block' : 'none';
+  document.getElementById('dt-lbl').textContent = auto ? 'Automática' : 'Manual';
+}
+
+// ── TYPE ──
+function setType(t) {
+  currentType = t;
+  document.getElementById('btn-comp').className = 'type-btn'+(t==='comp'?' active-comp':'');
+  document.getElementById('btn-trac').className = 'type-btn'+(t==='trac'?' active-trac':'');
+  liveCalc();
+}
+
+// ── LIVE CALC ──
+function liveCalc() {
+  const spec  = parseFloat(document.getElementById('f-spec').value);
+  const found = parseFloat(document.getElementById('f-found').value);
+  const unit  = document.getElementById('f-unit').value;
+
+  document.getElementById('live-unit').textContent = isNaN(found) ? '—' : unit;
+  document.getElementById('live-found').childNodes[0].textContent = isNaN(found) ? '— ' : found.toFixed(2)+' ';
+
+  const badge   = document.getElementById('live-badge');
+  const diffRow = document.getElementById('diff-row');
+
+  if (isNaN(spec)||isNaN(found)) {
+    badge.textContent='AGUARDANDO'; badge.className='status-badge s-idle';
+    diffRow.style.display='none';
+    document.getElementById('prog-fill').style.width='0%';
+    document.getElementById('prog-label').textContent='Preencha os valores para avaliar';
+    return;
+  }
+  const diff = found-spec, pct = spec!==0?(diff/spec)*100:0, ok = found>=spec;
+  badge.textContent = ok?'APROVADO':'REPROVADO';
+  badge.className   = 'status-badge '+(ok?'s-ok':'s-fail');
+  diffRow.style.display='flex';
+  const sign = diff>=0?'+':'';
+  document.getElementById('diff-val').textContent = sign+diff.toFixed(2)+' '+unit;
+  document.getElementById('diff-val').style.color = ok?'var(--success)':'var(--danger)';
+  document.getElementById('diff-pct').textContent = '('+sign+pct.toFixed(1)+'%)';
+  document.getElementById('diff-pct').style.color = ok?'var(--success)':'var(--danger)';
+  const f = document.getElementById('prog-fill');
+  f.style.width = Math.min(spec>0?(found/spec)*100:50,100)+'%';
+  f.style.background = ok?'var(--success)':'var(--danger)';
+  document.getElementById('prog-label').textContent =
+    'Encontrado: '+found.toFixed(2)+' '+unit+'  ·  Especificado: '+spec.toFixed(2)+' '+unit+
+    '  ·  '+(ok?'✓ Dentro do especificado':'✗ Abaixo do especificado');
+}
+
+// ── SAVE TO FIREBASE ──
+async function saveRecord() {
+  const inspector = document.getElementById('f-inspector').value.trim();
+  const sample    = document.getElementById('f-sample').value.trim();
+  const spec      = parseFloat(document.getElementById('f-spec').value);
+  const found     = parseFloat(document.getElementById('f-found').value);
+  const unit      = document.getElementById('f-unit').value;
+  const temp      = document.getElementById('f-temp').value.trim();
+  const notes     = document.getElementById('f-notes').value.trim();
+  const isAuto    = document.getElementById('auto-dt').checked;
+
+  if (!inspector) { showToast('⚠ Informe o nome do inspetor.'); return; }
+  if (!sample)    { showToast('⚠ Informe o código da amostra.'); return; }
+  if (isNaN(spec)||isNaN(found)) { showToast('⚠ Informe o valor especificado e encontrado.'); return; }
+
+  if (!window._db) { showToast('⚠ Firebase não conectado ainda. Aguarde.'); return; }
+
+  let recDate, recTime, recDateFull;
+  if (isAuto) {
+    const now = new Date();
+    recDate     = now.toLocaleDateString('pt-BR');
+    recTime     = now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    recDateFull = now.toISOString().slice(0,10);
+  } else {
+    const dtVal = document.getElementById('f-datetime').value;
+    if (!dtVal) { showToast('⚠ Informe a data e hora do ensaio.'); return; }
+    const dt = new Date(dtVal);
+    recDate     = dt.toLocaleDateString('pt-BR');
+    recTime     = dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    recDateFull = dtVal.slice(0,10);
+  }
+
+  const diff   = found-spec;
+  const desvio = spec!==0?(diff/spec)*100:0;
+  const status = found>=spec?'Aprovado':'Reprovado';
+
+  // Set saving state
+  const btn = document.getElementById('btn-save');
+  const spinner = document.getElementById('save-spinner');
+  const lbl = document.getElementById('save-label');
+  btn.disabled=true; spinner.style.display='block'; lbl.textContent='Salvando na nuvem...';
+
+  try {
+    const { collection, addDoc, serverTimestamp } = window._fbFns;
+    await addDoc(collection(window._db, window._col), {
+      createdAt: serverTimestamp(),
+      date: recDate, dateFull: recDateFull, time: recTime,
+      type: currentType, inspector, sample,
+      spec, found, unit, diff, desvio, temp, status, notes
+    });
+    showToast(status==='Aprovado'?'✓ Aprovado — salvo na nuvem!':'✗ Reprovado — salvo na nuvem.');
+    clearForm();
+  } catch(e) {
+    showToast('⚠ Erro ao salvar: '+e.message);
+  } finally {
+    btn.disabled=false; spinner.style.display='none'; lbl.textContent='↗ REGISTRAR RESULTADO';
+  }
+}
+
+// ── DELETE FROM FIREBASE ──
+async function deleteRecord(firestoreId) {
+  if (!confirm('Remover este registro da nuvem?')) return;
+  try {
+    const { doc, deleteDoc } = window._fbFns;
+    await deleteDoc(doc(window._db, window._col, firestoreId));
+    showToast('Registro removido da nuvem.');
+  } catch(e) {
+    showToast('⚠ Erro ao remover: '+e.message);
+  }
+}
+
+// ── CLEAR ALL ──
+function openConfirmClear() {
+  const n = (window._records||[]).length;
+  document.getElementById('confirm-count').textContent = n;
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+function closeConfirmClear() { document.getElementById('confirm-overlay').classList.remove('open'); }
+async function clearAllData() {
+  const records = window._records||[];
+  if (!records.length) { closeConfirmClear(); return; }
+  try {
+    const { doc, deleteDoc } = window._fbFns;
+    for (const r of records) {
+      await deleteDoc(doc(window._db, window._col, r.firestoreId));
+    }
+    showToast('Todos os registros foram removidos da nuvem.');
+  } catch(e) {
+    showToast('⚠ Erro: '+e.message);
+  }
+  closeConfirmClear();
+}
+
+// ── METRICS ──
+function updateMetrics(records) {
+  const n = records.length, ok = records.filter(r=>r.status==='Aprovado').length;
+  const fail = records.filter(r=>r.status==='Reprovado').length;
+  const pct = n?Math.round(ok/n*100):0;
+  document.getElementById('m-total').textContent    = n;
+  document.getElementById('m-ok').textContent       = ok;
+  document.getElementById('m-fail').textContent     = fail;
+  document.getElementById('m-pct').textContent      = n?pct+'%':'—';
+  document.getElementById('m-ok-pct').textContent   = n?pct+'% do total':'—% do total';
+  document.getElementById('m-fail-pct').textContent = n?(100-pct)+'% do total':'—% do total';
+}
+
+// ── CHARTS ──
+function initCharts() {
+  const gFont={family:'DM Mono, monospace',size:10};
+  Chart.defaults.color='#8a97a8';
+
+  lineChart = new Chart(document.getElementById('lineChart'),{
+    type:'line',
+    data:{labels:[],datasets:[
+      {label:'Especificado',data:[],borderColor:'#1a6eff',borderWidth:1.5,pointRadius:3,pointBackgroundColor:'#1a6eff',tension:.4,fill:false,borderDash:[4,3]},
+      {label:'Encontrado',  data:[],borderColor:'#e55a2b',backgroundColor:'#e55a2b12',borderWidth:2,pointRadius:4,pointBackgroundColor:'#e55a2b',tension:.4,fill:true}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:300},
+      plugins:{legend:{position:'top',labels:{font:gFont,boxWidth:10,padding:12}},
+        tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.parsed.y.toFixed(2)}}},
+      scales:{x:{grid:{color:'#eef1f6'},ticks:{font:{...gFont,size:9},maxTicksLimit:10}},
+        y:{grid:{color:'#eef1f6'},ticks:{font:{...gFont,size:9}}}}}
+  });
+
+  doughnutChart = new Chart(document.getElementById('doughnutChart'),{
+    type:'doughnut',
+    data:{labels:['Aprovados','Reprovados'],datasets:[{data:[0,0],backgroundColor:['#dcfce7','#fee2e2'],borderColor:['#16a34a','#e53e3e'],borderWidth:1.5,hoverOffset:4}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'65%',
+      plugins:{legend:{position:'bottom',labels:{font:{...gFont,size:9},boxWidth:8,padding:8}}}}
+  });
+
+  deviationChart = new Chart(document.getElementById('deviationChart'),{
+    type:'bar',
+    data:{labels:[],datasets:[{label:'Desvio %',data:[],backgroundColor:[],borderColor:[],borderWidth:1,borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:300},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>'Desvio: '+ctx.parsed.y.toFixed(1)+'%'}}},
+      scales:{x:{grid:{display:false},ticks:{font:{...gFont,size:9}}},
+        y:{grid:{color:'#eef1f6'},ticks:{font:{...gFont,size:9},callback:v=>v+'%'}}}}
+  });
+
+  chartsReady = true;
+  // If data already loaded, update now
+  if (window._records) updateCharts(window._records);
+}
+
+function updateCharts(records) {
+  lineChart.data.labels = records.map(r=>r.sample);
+  lineChart.data.datasets[0].data = records.map(r=>r.spec);
+  lineChart.data.datasets[1].data = records.map(r=>r.found);
+  lineChart.update();
+  document.getElementById('chart-count').textContent = records.length+' ensaio'+(records.length!==1?'s':'');
+
+  const ok = records.filter(r=>r.status==='Aprovado').length;
+  doughnutChart.data.datasets[0].data=[ok,records.length-ok];
+  doughnutChart.update();
+
+  const last20 = records.slice(-20);
+  deviationChart.data.labels = last20.map(r=>r.sample);
+  deviationChart.data.datasets[0].data = last20.map(r=>parseFloat(r.desvio.toFixed(1)));
+  deviationChart.data.datasets[0].backgroundColor = last20.map(r=>r.status==='Aprovado'?'#dcfce7':'#fee2e2');
+  deviationChart.data.datasets[0].borderColor      = last20.map(r=>r.status==='Aprovado'?'#16a34a':'#e53e3e');
+  deviationChart.update();
+}
+
+// ── TABLE ──
+function renderTable() {
+  const records = window._records||[];
+  const q = document.getElementById('tbl-search').value.toLowerCase();
+  const sorted = [...records].sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+  const filtered = sorted.filter(r=>[r.sample,r.inspector,r.unit,r.status,r.type,r.date].join(' ').toLowerCase().includes(q));
+  const tbody = document.getElementById('tbl-body');
+  if (!filtered.length) {
+    tbody.innerHTML = records.length===0
+      ? '<tr><td class="empty-td" colspan="12">Nenhum ensaio na nuvem. Preencha o formulário acima.</td></tr>'
+      : '<tr><td class="empty-td" colspan="12">Nenhum registro encontrado para esse filtro.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtered.map((r,i)=>{
+    const tag = r.type==='comp'?'<span class="tag-comp">COMP.</span>':'<span class="tag-trac">TRAÇÃO</span>';
+    const sc  = r.status==='Aprovado'?'res-ok':'res-fail';
+    const sign= (r.diff||0)>=0?'+':'';
+    return `<tr>
+      <td class="td-mono">${i+1}</td>
+      <td class="td-mono" style="font-size:11px;white-space:nowrap">${r.date||'—'}<br><span style="color:var(--text3)">${r.time||'—'}</span></td>
+      <td>${tag}</td>
+      <td>${r.inspector}</td>
+      <td class="td-amostra">${r.sample}</td>
+      <td class="td-mono">${r.unit}</td>
+      <td class="td-mono">${(+r.spec).toFixed(2)}</td>
+      <td class="td-mono" style="font-weight:600">${(+r.found).toFixed(2)}</td>
+      <td class="td-mono" style="color:${r.status==='Aprovado'?'var(--success)':'var(--danger)'}">${sign}${(+r.desvio).toFixed(1)}%</td>
+      <td class="td-mono">${r.temp||'—'}</td>
+      <td class="${sc}">${r.status}</td>
+      <td style="white-space:nowrap">
+        <button class="print-row-btn" onclick='printSingle(${JSON.stringify(r.firestoreId)})'>⎙</button>
+        <button class="del-btn" onclick='deleteRecord(${JSON.stringify(r.firestoreId)})'>✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── CLEAR FORM ──
+function clearForm() {
+  ['f-inspector','f-sample','f-spec','f-found','f-temp','f-notes','f-datetime'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-unit').value='kN';
+  document.getElementById('auto-dt').checked=true; toggleDt();
+  document.getElementById('live-found').childNodes[0].textContent='— ';
+  document.getElementById('live-unit').textContent='—';
+  document.getElementById('live-badge').textContent='AGUARDANDO';
+  document.getElementById('live-badge').className='status-badge s-idle';
+  document.getElementById('diff-row').style.display='none';
+  document.getElementById('prog-fill').style.width='0%';
+  document.getElementById('prog-label').textContent='Preencha os valores para avaliar';
+}
+
+// ── CSV ──
+function exportCSV() {
+  const records = window._records||[];
+  if (!records.length) { showToast('Nenhum dado para exportar.'); return; }
+  const h=['#','Data','Hora','Tipo','Inspetor','Amostra','Unidade','Especificado','Encontrado','Desvio(%)','Temp(°C)','Status','Observações'];
+  const rows=[...records].sort((a,b)=>(a.createdAt?.seconds||0)-(b.createdAt?.seconds||0)).map((r,i)=>[
+    i+1,r.date||'',r.time||'',r.type==='comp'?'Compressão':'Tração',
+    r.inspector,r.sample,r.unit,(+r.spec).toFixed(2),(+r.found).toFixed(2),
+    (+r.desvio).toFixed(2),r.temp||'',r.status,(r.notes||'').replace(/,/g,';')
+  ].join(','));
+  const csv=[h.join(','),...rows].join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent('\uFEFF'+csv);
+  a.download='rochling_metrologia_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click(); showToast('✓ CSV exportado.');
+}
+
+// ── MODAL ──
+function openModal() {
+  const n=(window._records||[]).length;
+  if(!n){showToast('Nenhum registro para laudo.');return;}
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal(){document.getElementById('modal').classList.remove('open');}
+function printSingle(fid) {
+  const r=(window._records||[]).find(x=>x.firestoreId===fid); if(!r) return;
+  openModal();
+  document.getElementById('p-filter').value=r.sample;
+  if(r.dateFull){document.getElementById('p-date-from').value=r.dateFull;document.getElementById('p-date-to').value=r.dateFull;}
+}
+
+// ── PRINT ──
+function printReport() {
+  const empresa  = document.getElementById('p-empresa').value.trim()||'Röchling';
+  const numLaudo = document.getElementById('p-laudo').value.trim()||'ROC-'+new Date().getFullYear()+'-'+String((window._records||[]).length).padStart(3,'0');
+  const resp     = document.getElementById('p-resp').value.trim()||'—';
+  const crea     = document.getElementById('p-crea').value.trim()||'—';
+  const flt      = document.getElementById('p-filter').value.trim().toLowerCase();
+  const obs      = document.getElementById('p-obs').value.trim();
+  const df       = document.getElementById('p-date-from').value;
+  const dt       = document.getElementById('p-date-to').value;
+
+  let data=[...(window._records||[])].sort((a,b)=>(a.createdAt?.seconds||0)-(b.createdAt?.seconds||0));
+  if(flt) data=data.filter(r=>r.sample.toLowerCase().includes(flt)||r.inspector.toLowerCase().includes(flt));
+  if(df)  data=data.filter(r=>!r.dateFull||r.dateFull>=df);
+  if(dt)  data=data.filter(r=>!r.dateFull||r.dateFull<=dt);
+  if(!data.length){showToast('Nenhum registro com esse filtro.');return;}
+
+  const now=new Date();
+  const dtStr=now.toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
+  const hrStr=now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const ok=data.filter(r=>r.status==='Aprovado').length;
+  const fail=data.filter(r=>r.status==='Reprovado').length;
+  const pct=Math.round(ok/data.length*100);
+  const devs=data.map(r=>+r.desvio);
+  const avg=(devs.reduce((a,b)=>a+b,0)/devs.length).toFixed(1);
+
+  const rows=data.map((r,i)=>{
+    const bg=i%2===0?'#fff':'#f8fafc';
+    const sc=r.status==='Aprovado'?'#15803d':'#dc2626';
+    const sign=(+r.diff)>=0?'+':'';
+    return `<tr style="background:${bg}">
+      <td>${i+1}</td><td>${r.date||'—'}</td><td>${r.time||'—'}</td>
+      <td style="font-weight:600;color:${r.type==='comp'?'#1d4ed8':'#c2410c'}">${r.type==='comp'?'Compressão':'Tração'}</td>
+      <td>${r.inspector}</td><td style="font-weight:600">${r.sample}</td><td>${r.unit}</td>
+      <td>${(+r.spec).toFixed(2)}</td><td style="font-weight:700">${(+r.found).toFixed(2)}</td>
+      <td style="color:${sc}">${sign}${(+r.desvio).toFixed(1)}%</td>
+      <td>${r.temp||'—'}</td><td style="font-weight:700;color:${sc}">${r.status}</td>
+    </tr>`;
+  }).join('');
+
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head>
+<meta charset="UTF-8"><title>Laudo — ${numLaudo}</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;color:#0d1117;background:#fff;font-size:11.5px;}
+@page{margin:14mm;size:A4;}
+.hdr{display:flex;align-items:flex-start;justify-content:space-between;border-bottom:2.5px solid #0d1117;padding-bottom:18px;margin-bottom:22px;}
+.brand{font-family:'Syne',sans-serif;font-size:26px;font-weight:800;letter-spacing:-1px;}
+.brand em{color:#1a6eff;font-style:normal;}
+.brand-sub{font-family:'DM Mono',monospace;font-size:9px;color:#8a97a8;letter-spacing:.08em;text-transform:uppercase;margin-top:3px;}
+.brand-co{font-size:11px;color:#4a5568;margin-top:8px;}
+.rTitle{text-align:right;}
+.rTitle h1{font-family:'Syne',sans-serif;font-size:16px;font-weight:700;}
+.rTitle p{font-family:'DM Mono',monospace;font-size:9px;color:#8a97a8;margin-top:4px;}
+.num{display:inline-block;background:#0d1117;color:#1a6eff;font-family:'DM Mono',monospace;font-size:10px;padding:4px 12px;border-radius:4px;margin-top:6px;letter-spacing:.06em;}
+.sec{font-family:'Syne',sans-serif;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;border-bottom:1.5px solid #0d1117;padding-bottom:5px;margin:18px 0 12px;}
+.ig{display:grid;grid-template-columns:1fr 1fr;border:1px solid #dde2ea;border-radius:8px;overflow:hidden;margin-bottom:18px;}
+.ic{padding:9px 13px;border-right:1px solid #dde2ea;border-bottom:1px solid #dde2ea;}
+.ic:nth-child(2n){border-right:none;}.ic:nth-last-child(-n+2){border-bottom:none;}
+.ik{font-family:'DM Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.08em;color:#8a97a8;margin-bottom:3px;}
+.iv{font-size:11px;font-weight:500;}
+.verdict{text-align:center;padding:14px;border-radius:8px;margin-bottom:18px;}
+.v-ok{background:#f0fdf4;border:2px solid #16a34a;}.v-fail{background:#fef2f2;border:2px solid #dc2626;}
+.vt{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;}
+.vs{font-size:10px;color:#64748b;margin-top:4px;}
+.sum{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:18px;}
+.sc{background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:10px;text-align:center;}
+.sl{font-family:'DM Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.07em;color:#8a97a8;margin-bottom:5px;}
+.sv{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;}
+table{width:100%;border-collapse:collapse;font-size:9.5px;margin-bottom:18px;}
+thead tr{background:#0d1117;}
+thead th{color:#e8ecf0;padding:7px;text-align:left;font-family:'DM Mono',monospace;font-size:8.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:400;}
+tbody td{padding:6px 7px;border-bottom:1px solid #f1f5f9;}
+.obs{background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:12px;margin-bottom:18px;}
+.obs-t{font-family:'DM Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.08em;color:#8a97a8;margin-bottom:5px;}
+.obs-c{font-size:10.5px;color:#4a5568;line-height:1.6;white-space:pre-wrap;}
+.sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:28px;margin-top:36px;}
+.sig{text-align:center;}.sig-line{border-top:1px solid #334155;padding-top:7px;}
+.sig-name{font-weight:600;font-size:10.5px;}.sig-role{font-family:'DM Mono',monospace;font-size:8px;color:#8a97a8;letter-spacing:.04em;}
+.footer{border-top:1px solid #e2e8f0;padding-top:10px;margin-top:14px;display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:8px;color:#94a3b8;}
+</style></head><body>
+<div class="hdr">
+  <div><div class="brand">Röchling — <em>Metrologia</em></div>
+  <div class="brand-sub">Sistema de Inspeção Mecânica</div>
+  <div class="brand-co">${empresa}</div></div>
+  <div class="rTitle"><h1>Laudo Técnico de Ensaio</h1>
+  <p>Compressão &amp; Tração — Resultados Certificados</p>
+  <div class="num">${numLaudo}</div>
+  <p style="margin-top:5px;font-family:'DM Mono',monospace;font-size:8px;color:#94a3b8">Emitido em ${dtStr} às ${hrStr}</p></div>
+</div>
+<div class="sec">Identificação</div>
+<div class="ig">
+  <div class="ic"><div class="ik">Empresa</div><div class="iv">${empresa}</div></div>
+  <div class="ic"><div class="ik">Número do laudo</div><div class="iv">${numLaudo}</div></div>
+  <div class="ic"><div class="ik">Responsável técnico</div><div class="iv">${resp}</div></div>
+  <div class="ic"><div class="ik">Registro profissional</div><div class="iv">${crea}</div></div>
+  <div class="ic"><div class="ik">Data de emissão</div><div class="iv">${dtStr}</div></div>
+  <div class="ic"><div class="ik">Total de amostras</div><div class="iv">${data.length} corpos de prova</div></div>
+</div>
+<div class="verdict ${fail===0?'v-ok':'v-fail'}">
+  <div class="vt" style="color:${fail===0?'#15803d':'#dc2626'}">${fail===0?'✓ LOTE APROVADO':'✗ LOTE COM REPROVAÇÕES'}</div>
+  <div class="vs">${ok} aprovados · ${fail} reprovados · Taxa de aprovação: ${pct}%</div>
+</div>
+<div class="sec">Resumo estatístico</div>
+<div class="sum">
+  <div class="sc"><div class="sl">Ensaios</div><div class="sv">${data.length}</div></div>
+  <div class="sc"><div class="sl">Aprovados</div><div class="sv" style="color:#15803d">${ok}</div></div>
+  <div class="sc"><div class="sl">Reprovados</div><div class="sv" style="color:#dc2626">${fail}</div></div>
+  <div class="sc"><div class="sl">Aprovação</div><div class="sv">${pct}%</div></div>
+  <div class="sc"><div class="sl">Desvio médio</div><div class="sv" style="font-size:14px">${avg}%</div></div>
+</div>
+<div class="sec">Resultados individuais</div>
+<table><thead><tr>
+  <th>#</th><th>Data</th><th>Hora</th><th>Tipo</th><th>Inspetor</th><th>Amostra</th>
+  <th>Unidade</th><th>Especificado</th><th>Encontrado</th><th>Desvio</th><th>Temp °C</th><th>Status</th>
+</tr></thead><tbody>${rows}</tbody></table>
+${obs?`<div class="obs"><div class="obs-t">Observações</div><div class="obs-c">${obs}</div></div>`:''}
+<div class="sec">Assinaturas</div>
+<div class="sigs">
+  <div class="sig"><div style="height:44px"></div><div class="sig-line"><div class="sig-name">${data[0]?.inspector||'—'}</div><div class="sig-role">INSPETOR RESPONSÁVEL</div></div></div>
+  <div class="sig"><div style="height:44px"></div><div class="sig-line"><div class="sig-name">${resp}</div><div class="sig-role">RESPONSÁVEL TÉCNICO · ${crea}</div></div></div>
+  <div class="sig"><div style="height:44px"></div><div class="sig-line"><div class="sig-name">Controle de Qualidade</div><div class="sig-role">APROVAÇÃO DO LAUDO</div></div></div>
+</div>
+<div class="footer">
+  <span>${empresa} · ${numLaudo}</span>
+  <span>Röchling Metrologia · ${dtStr} ${hrStr}</span>
+  <span>Página 1 de 1</span>
+</div>
+<script>window.onload=()=>{window.print();}<\/script>
+</body></html>`;
+
+  const w=window.open('','_blank');
+  w.document.write(html); w.document.close();
+  closeModal(); showToast('✓ Laudo gerado!');
+}
+
+// ── TOAST ──
+function showToast(msg) {
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),3500);
+}
+
+// ── INIT ──
+initCharts();
+</script>
+</body>
+</html>
