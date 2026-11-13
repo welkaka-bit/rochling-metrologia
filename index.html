@@ -262,6 +262,9 @@ tbody tr:hover td{background:var(--bg3);}
 .tbl-compact tbody td{padding:6px 8px;}
 .td-datetime{white-space:nowrap;}
 .td-nowrap{white-space:nowrap;}
+.row-click{cursor:pointer;}
+.row-click:hover td{background:var(--bg3);}
+.editing-row.row-click:hover td{background:var(--editL);}
 tbody tr.editing-row td{background:var(--editL);border-bottom-color:rgba(245,158,11,.3);}
 .td-mono{font-family:'IBM Plex Mono',monospace;color:var(--text);letter-spacing:.03em;}
 .td-date-main{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;color:var(--text);letter-spacing:.02em;display:block;}
@@ -773,7 +776,7 @@ select:disabled{opacity:.75;cursor:not-allowed;}
           <thead>
             <tr>
               <th>#</th><th>Data · Hora</th><th>Tipo</th>
-              <th>Inspetor</th><th>Amostra</th><th>Linha</th><th>Turno</th><th>SAP</th><th>Unid./Item</th>
+              <th>Inspetor</th><th>SAP</th><th>Amostra</th><th>Linha</th><th>Turno</th><th>Unid./Item</th>
               <th>Espec.</th><th>Encontrado</th><th>Desvio</th><th>Status</th><th>Ações</th>
             </tr>
           </thead>
@@ -1003,10 +1006,10 @@ select:disabled{opacity:.75;cursor:not-allowed;}
       <table class="tbl-compact">
         <thead><tr>
           <th class="chk-col"><input type="checkbox" class="row-checkbox" id="chk-all" onchange="toggleAllChk(this)"></th>
-          <th>#</th><th>Data · Hora</th><th>Tipo</th><th>Inspetor</th>
-          <th>Amostra</th><th>Linha</th><th>Turno</th><th>SAP</th><th>Unid./Item</th><th>Espec.</th><th>Encontrado</th><th>Desvio</th><th>Status</th>
+          <th>#</th><th>Data · Hora</th><th>Tipo</th><th>Inspetor</th><th>SAP</th>
+          <th>Amostra</th><th>Linha</th><th>Turno</th><th>Unid./Item</th><th>Espec.</th><th>Encontrado</th><th>Desvio</th><th>Status</th>
         </tr></thead>
-        <tbody id="print-tbl-body"><tr><td class="empty-td" colspan="15">Carregando...</td></tr></tbody>
+        <tbody id="print-tbl-body"><tr><td class="empty-td" colspan="14">Carregando...</td></tr></tbody>
       </table>
     </div>
     <div class="pp-footer">
@@ -1550,24 +1553,24 @@ function renderTable(){
     const sc=r.status==='Aprovado'?'res-ok':'res-fail';
     const sign=(r.diff||0)>=0?'+':'';
     const isEditing=editingId===r.firestoreId;
-    return`<tr class="${isEditing?'editing-row':''}">
+    return`<tr class="row-click ${isEditing?'editing-row':''}" onclick='openEditModal(${JSON.stringify(r.firestoreId)})' title="Clique para visualizar e editar">
       <td class="td-mono">${off+i+1}</td>
       <td class="td-datetime"><span class="td-date-main">${esc(r.date||'—')}</span><span class="td-date-wd">${esc(getWd(r))}</span><span class="td-date-time">${esc(r.time||'—')}</span></td>
       <td>${typeTag(r.type)}</td>
       <td style="font-size:12px">${esc(r.inspector)}</td>
+      <td class="td-mono td-nowrap" style="font-size:11px">${esc(r.sap||'—')}</td>
       <td class="td-amostra">${esc(r.sample)}${vTag(r)}${descTag(r)}</td>
       <td class="td-nowrap" style="font-size:11px">${esc(r.line||'—')}</td>
       <td class="td-nowrap" style="font-size:11px">${esc(r.shift||'—')}</td>
-      <td class="td-mono td-nowrap" style="font-size:11px">${esc(r.sap||'—')}</td>
       <td class="td-mono">${esc(unitCell(r))}</td>
       <td class="td-mono">${esc(fmtN(r,'spec'))}</td>
       <td class="td-mono" style="font-weight:700">${esc(fmtN(r,'found'))}</td>
       <td class="td-mono" style="color:${r.status==='Aprovado'?'var(--success)':'var(--danger)'}">${fmtDev(r,sign)}</td>
       <td class="${sc}">${esc(r.status)}</td>
       <td style="white-space:nowrap">
-        <button class="print-row-btn" onclick='printSingle(${JSON.stringify(r.firestoreId)})' title="Imprimir laudo">⎙</button>
-        <button class="edit-btn" onclick='openEditModal(${JSON.stringify(r.firestoreId)})' title="Editar">✏</button>
-        <button class="del-btn" onclick='deleteRecord(${JSON.stringify(r.firestoreId)})' title="Excluir">✕</button>
+        <button class="print-row-btn" onclick='event.stopPropagation();printSingle(${JSON.stringify(r.firestoreId)})' title="Imprimir laudo">⎙</button>
+        <button class="edit-btn" onclick='event.stopPropagation();openEditModal(${JSON.stringify(r.firestoreId)})' title="Editar">✏</button>
+        <button class="del-btn" onclick='event.stopPropagation();deleteRecord(${JSON.stringify(r.firestoreId)})' title="Excluir">✕</button>
       </td>
     </tr>`;
   }).join('');
@@ -1836,10 +1839,10 @@ function renderPrintTable(){
       <td class="td-datetime"><span class="td-date-main">${esc(r.date||'—')}</span><span class="td-date-wd">${esc(getWd(r))}</span><span class="td-date-time">${esc(r.time||'—')}</span></td>
       <td>${typeTag(r.type)}</td>
       <td style="font-size:11px">${esc(r.inspector)}</td>
+      <td class="td-mono td-nowrap" style="font-size:11px">${esc(r.sap||'—')}</td>
       <td class="td-amostra">${esc(r.sample)}${vTag(r)}${descTag(r)}</td>
       <td class="td-nowrap" style="font-size:11px">${esc(r.line||'—')}</td>
       <td class="td-nowrap" style="font-size:11px">${esc(r.shift||'—')}</td>
-      <td class="td-mono td-nowrap" style="font-size:11px">${esc(r.sap||'—')}</td>
       <td class="td-mono">${esc(unitCell(r))}</td>
       <td class="td-mono">${esc(fmtN(r,'spec'))}</td>
       <td class="td-mono" style="font-weight:700">${esc(fmtN(r,'found'))}</td>
